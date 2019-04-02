@@ -25,6 +25,7 @@ class Policy(nn.Module):
             else:
                 raise NotImplementedError
 
+        print(obs_shape, action_space)
         self.base = base(obs_shape[0], **base_kwargs)
 
         if action_space.__class__.__name__ == "Discrete":
