@@ -15,8 +15,12 @@ class Flatten(nn.Module):
 class Policy(nn.Module):
     def __init__(self, obs_shape, action_space, base=None, base_kwargs=None):
         super(Policy, self).__init__()
+
+
+        '''
         if base_kwargs is None:
             base_kwargs = {}
+            
         if base is None:
             if len(obs_shape) == 3:
                 base = CNNBase
@@ -24,9 +28,18 @@ class Policy(nn.Module):
                 base = MLPBase
             else:
                 raise NotImplementedError
+        '''
 
-        print(obs_shape, action_space)
-        self.base = base(obs_shape[0], **base_kwargs)
+        image_shape = obs_shape.spaces['feature_screen'].shape
+        non_image_shape = len(obs_shape.spaces) - 1
+        self.base = MixBase(image_shape[0], **base_kwargs)
+
+        '''
+        else:
+            print(obs_shape, action_space)
+            self.base = base(obs_shape[0], **base_kwargs)      
+        
+        '''
 
         if action_space.__class__.__name__ == "Discrete":
             num_outputs = action_space.n
@@ -52,8 +65,8 @@ class Policy(nn.Module):
     def forward(self, inputs, rnn_hxs, masks):
         raise NotImplementedError
 
-    def act(self, inputs, rnn_hxs, masks, deterministic=False):
-        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+    def act(self, image_inputs, non_image_inputs, rnn_hxs, masks, deterministic=False):
+        value, actor_features, rnn_hxs = self.base(image_inputs, non_image_inputs, rnn_hxs, masks)
         dist = self.dist(actor_features)
 
         if deterministic:
@@ -66,8 +79,8 @@ class Policy(nn.Module):
 
         return value, action, action_log_probs, rnn_hxs
 
-    def get_value(self, inputs, rnn_hxs, masks):
-        value, _, _ = self.base(inputs, rnn_hxs, masks)
+    def get_value(self, image_inputs, non_image_inputs, rnn_hxs, masks):
+        value, _, _ = self.base(image_inputs, non_image_inputs, rnn_hxs, masks)
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, action):
@@ -128,10 +141,10 @@ class NNBase(nn.Module):
             # Let's figure out which steps in the sequence have a zero for any agent
             # We will always assume t=0 has a zero in it as that makes the logic cleaner
             has_zeros = ((masks[1:] == 0.0) \
-                            .any(dim=-1)
-                            .nonzero()
-                            .squeeze()
-                            .cpu())
+                         .any(dim=-1)
+                         .nonzero()
+                         .squeeze()
+                         .cpu())
 
             # +1 to correct the masks[1:]
             if has_zeros.dim() == 0:
@@ -220,6 +233,51 @@ class MLPBase(NNBase):
 
     def forward(self, inputs, rnn_hxs, masks):
         x = inputs
+
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+
+        hidden_critic = self.critic(x)
+        hidden_actor = self.actor(x)
+
+        return self.critic_linear(hidden_critic), hidden_actor, rnn_hxs
+
+
+class MixBase(NNBase):
+    def __init__(self, num_inputs, recurrent=False, hidden_size=512):
+        super(MixBase, self).__init__(recurrent, hidden_size, hidden_size)
+
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
+                               constant_(x, 0), nn.init.calculate_gain('relu'))
+
+        self.main = nn.Sequential(
+            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)), nn.ReLU(),
+            init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
+            init_(nn.Conv2d(64, 32, 3, stride=1)), nn.ReLU(), Flatten(),
+            init_(nn.Linear(32 * 7 * 7, hidden_size)), nn.ReLU())
+
+        if recurrent:
+            num_inputs = hidden_size
+
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
+                               constant_(x, 0))
+
+        self.actor = nn.Sequential(
+            init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
+            init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh())
+
+        self.critic = nn.Sequential(
+            init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
+            init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh())
+
+        self.train()
+
+    def forward(self, inputs_image, inputs_non_image, rnn_hxs, masks):
+        c = self.main(inputs_image / 255.0)
+        x = inputs_non_image
+
+        x = torch.cat((c.view(c.size(0), -1),
+                       x.view(x.size(0), -1)), dim=1)
 
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)

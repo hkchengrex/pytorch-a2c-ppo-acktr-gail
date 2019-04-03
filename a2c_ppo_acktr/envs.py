@@ -30,6 +30,7 @@ try:
 except ImportError:
     pass
 
+
 def make_env(env_id, seed, rank, log_dir, allow_early_resets):
     def _thunk():
         if env_id.startswith("dm"):
@@ -41,13 +42,12 @@ def make_env(env_id, seed, rank, log_dir, allow_early_resets):
         env.settings['visualize'] = False
         env.settings['step_mul'] = 8
         env.settings['agent_interface_format'] = sc2_env.parse_agent_interface_format(
-                feature_screen=84,
-                feature_minimap=84,
-                rgb_screen=None,
-                rgb_minimap=None,
-                action_space='FEATURES',
-                use_feature_units=True,
-                use_raw_units=True)
+            feature_screen=84,
+            feature_minimap=84,
+            rgb_screen=None,
+            rgb_minimap=None,
+            action_space='FEATURES',
+            use_feature_units=True)
 
         is_atari = hasattr(gym.envs, 'atari') and isinstance(
             env.unwrapped, gym.envs.atari.atari_env.AtariEnv)
@@ -105,18 +105,22 @@ def make_vec_envs(env_name,
     else:
         envs = DummyVecEnv(envs)
 
+    '''
     if len(envs.observation_space.shape) == 1:
         if gamma is None:
             envs = VecNormalize(envs, ret=False)
         else:
             envs = VecNormalize(envs, gamma=gamma)
+    '''
 
     envs = VecPyTorch(envs, device)
 
+    '''
     if num_frame_stack is not None:
         envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
     elif len(envs.observation_space.shape) == 3:
         envs = VecPyTorchFrameStack(envs, 4, device)
+        '''
 
     return envs
 
@@ -156,7 +160,7 @@ class TransposeImage(TransposeObs):
         Transpose observation space for images
         """
         super(TransposeImage, self).__init__(env)
-        assert len(op) == 3, f"Error: Operation, {str(op)}, must be dim3"
+        assert len(op) == 3, "Error: Operation, {str(op)}, must be dim3"
         self.op = op
         obs_shape = self.observation_space.shape
         self.observation_space = Box(
@@ -236,7 +240,7 @@ class VecPyTorchFrameStack(VecEnvWrapper):
 
         if device is None:
             device = torch.device('cpu')
-        self.stacked_obs = torch.zeros((venv.num_envs, ) +
+        self.stacked_obs = torch.zeros((venv.num_envs,) +
                                        low.shape).to(device)
 
         observation_space = gym.spaces.Box(
