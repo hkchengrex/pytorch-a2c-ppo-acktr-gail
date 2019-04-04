@@ -25,14 +25,27 @@ class RolloutStorage(object):
         self.rewards = torch.zeros(num_steps, num_processes, 1)
         self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
         self.returns = torch.zeros(num_steps + 1, num_processes, 1)
+
+
+
+
+        ###
+
         self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
-        if action_space.__class__.__name__ == 'Discrete':
-            action_shape = 1
-        else:
-            action_shape = action_space.shape[0]
-        self.actions = torch.zeros(num_steps, num_processes, action_shape)
+
+        continous_output_shape = action_space.spaces['continous_output'].shape[0]
+        discrete_output_shape = action_space.spaces['discrete_output'].shape[0]
+
+        self.dis_actions = torch.zeros(num_steps, num_processes, discrete_output_shape)
+        self.con_actions = torch.zeros(num_steps, num_processes, continous_output_shape)
+
+        ###
+
+        '''
         if action_space.__class__.__name__ == 'Discrete':
             self.actions = self.actions.long()
+        '''
+
         self.masks = torch.ones(num_steps + 1, num_processes, 1)
 
         # Masks that indicate whether it's a true terminal state
@@ -54,12 +67,19 @@ class RolloutStorage(object):
         self.rewards = self.rewards.to(device)
         self.value_preds = self.value_preds.to(device)
         self.returns = self.returns.to(device)
+
+        ####
+
         self.action_log_probs = self.action_log_probs.to(device)
-        self.actions = self.actions.to(device)
+        self.dis_actions = self.dis_actions.to(device)
+        self.con_actions = self.con_actions.to(device)
+        ####
+
+
         self.masks = self.masks.to(device)
         self.bad_masks = self.bad_masks.to(device)
 
-    def insert(self, image, non_image, recurrent_hidden_states, actions, action_log_probs,
+    def insert(self, image, non_image, recurrent_hidden_states, dis_actions, con_actions, action_log_probs,
                value_preds, rewards, masks, bad_masks):
 
         ####
@@ -70,8 +90,15 @@ class RolloutStorage(object):
 
         self.recurrent_hidden_states[self.step +
                                      1].copy_(recurrent_hidden_states)
-        self.actions[self.step].copy_(actions)
+
+        ####
+
+        self.dis_actions[self.step].copy_(dis_actions)
+        self.con_actions[self.step].copy_(con_actions)
         self.action_log_probs[self.step].copy_(action_log_probs)
+        ####
+
+
         self.value_preds[self.step].copy_(value_preds)
         self.rewards[self.step].copy_(rewards)
         self.masks[self.step + 1].copy_(masks)
@@ -166,11 +193,25 @@ class RolloutStorage(object):
 
             recurrent_hidden_states_batch = self.recurrent_hidden_states[:-1].view(
                 -1, self.recurrent_hidden_states.size(-1))[indices]
-            actions_batch = self.actions.view(-1,
-                                              self.actions.size(-1))[indices]
+
+
+            ###
+
+            dis_actions_batch = self.dis_actions.view(-1,
+                                              self.dis_actions.size(-1))[indices]
+
+            con_actions_batch = self.con_actions.view(-1,
+                                              self.con_actions.size(-1))[indices]
+
+            ###
+
+
+
             value_preds_batch = self.value_preds[:-1].view(-1, 1)[indices]
             return_batch = self.returns[:-1].view(-1, 1)[indices]
+            return_batch = self.returns[:-1].view(-1, 1)[indices]
             masks_batch = self.masks[:-1].view(-1, 1)[indices]
+
             old_action_log_probs_batch = self.action_log_probs.view(-1,
                                                                     1)[indices]
             if advantages is None:
@@ -178,7 +219,7 @@ class RolloutStorage(object):
             else:
                 adv_targ = advantages.view(-1, 1)[indices]
 
-            yield image_batch, non_image_batch, recurrent_hidden_states_batch, actions_batch, \
+            yield image_batch, non_image_batch, recurrent_hidden_states_batch, dis_actions_batch, con_actions_batch, \
                   value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ
 
     def recurrent_generator(self, advantages, num_mini_batch):
@@ -199,7 +240,10 @@ class RolloutStorage(object):
             ###
 
             recurrent_hidden_states_batch = []
-            actions_batch = []
+
+            dis_actions_batch = []
+            con_actions_batch = []
+
             value_preds_batch = []
             return_batch = []
             masks_batch = []
@@ -210,15 +254,19 @@ class RolloutStorage(object):
                 ind = perm[start_ind + offset]
 
                 ###
-
                 image_batch.append(self.image[:-1, ind])
                 non_image_batch.append(self.non_image[:-1, ind])
-
                 ###
 
                 recurrent_hidden_states_batch.append(
                     self.recurrent_hidden_states[0:1, ind])
-                actions_batch.append(self.actions[:, ind])
+
+
+                ###
+                dis_actions_batch.append(self.dis_actions[:, ind])
+                con_actions_batch.append(self.con_actions[:, ind])
+                ###
+
                 value_preds_batch.append(self.value_preds[:-1, ind])
                 return_batch.append(self.returns[:-1, ind])
                 masks_batch.append(self.masks[:-1, ind])
@@ -237,7 +285,13 @@ class RolloutStorage(object):
 
             ###
 
-            actions_batch = torch.stack(actions_batch, 1)
+            dis_actions_batch = torch.stack(dis_actions_batch, 1)
+            con_actions_batch = torch.stack(con_actions_batch, 1)
+
+            ###
+
+
+
             value_preds_batch = torch.stack(value_preds_batch, 1)
             return_batch = torch.stack(return_batch, 1)
             masks_batch = torch.stack(masks_batch, 1)
@@ -254,8 +308,11 @@ class RolloutStorage(object):
             image_batch = _flatten_helper(T, N, image_batch)
             non_image_batch = _flatten_helper(T, N, non_image_batch)
 
+            ####
+            dis_actions_batch = _flatten_helper(T, N, dis_actions_batch)
+            con_actions_batch = _flatten_helper(T, N, con_actions_batch)
+            ####
 
-            actions_batch = _flatten_helper(T, N, actions_batch)
             value_preds_batch = _flatten_helper(T, N, value_preds_batch)
             return_batch = _flatten_helper(T, N, return_batch)
             masks_batch = _flatten_helper(T, N, masks_batch)
@@ -263,5 +320,5 @@ class RolloutStorage(object):
                                                          old_action_log_probs_batch)
             adv_targ = _flatten_helper(T, N, adv_targ)
 
-            yield image_batch, non_image_batch, recurrent_hidden_states_batch, actions_batch, \
+            yield image_batch, non_image_batch, recurrent_hidden_states_batch, dis_actions_batch, con_actions_batch, \
                   value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ

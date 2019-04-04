@@ -188,8 +188,8 @@ class VecPyTorch(VecEnvWrapper):
     def reset(self):
         obs = self.venv.reset()
 
-        obs = {'feature_screen': torch.from_numpy(obs['feature_screen']).float().to(self.device),
-               'info_discrete': torch.from_numpy(obs['info_discrete']).float().to(self.device)
+        obs = {"feature_screen": torch.from_numpy(obs['feature_screen']).float().to(self.device),
+               "info_discrete": torch.from_numpy(obs['info_discrete']).float().to(self.device)
                }
         return obs
 
@@ -197,8 +197,10 @@ class VecPyTorch(VecEnvWrapper):
         if isinstance(actions, torch.LongTensor):
             # Squeeze the dimension for discrete actions
             actions = actions.squeeze(1)
-        actions = actions.cpu().numpy()
-        self.venv.step_async(actions)
+        num_worker = len(actions["discrete_output"])
+        entire = [[actions["discrete_output"][i],
+                   actions["continous_output"][i]] for i in range(0, num_worker)]
+        self.venv.step_async(entire)
 
     ########
 

@@ -28,10 +28,11 @@ class Policy(nn.Module):
             else:
                 raise NotImplementedError
         '''
-
+        ###
         image_shape = obs_shape.spaces['feature_screen'].shape
         non_image_shape = obs_shape.spaces['info_discrete'].shape
-        self.base = MixBase(image_shape[0], non_image_shape[0] , **base_kwargs)
+        self.base = MixBase(image_shape[0], non_image_shape[0], **base_kwargs)
+        ###
 
         '''
         else:
@@ -40,6 +41,7 @@ class Policy(nn.Module):
         
         '''
 
+        '''
         if action_space.__class__.__name__ == "Discrete":
             num_outputs = action_space.n
             self.dist = Categorical(self.base.output_size, num_outputs)
@@ -51,6 +53,15 @@ class Policy(nn.Module):
             self.dist = Bernoulli(self.base.output_size, num_outputs)
         else:
             raise NotImplementedError
+        '''
+
+        ###
+        num_outputs = action_space.spaces['discrete_output'].shape[0]
+        self.dist_dis = Bernoulli(self.base.output_size, num_outputs)
+
+        num_outputs = action_space.spaces['continous_output'].shape[0]
+        self.dist_con = DiagGaussian(self.base.output_size, num_outputs)
+        ###
 
     @property
     def is_recurrent(self):
@@ -68,17 +79,27 @@ class Policy(nn.Module):
     def act(self, image_inputs, non_image_inputs, rnn_hxs, masks, deterministic=False):
 
         value, actor_features, rnn_hxs = self.base(image_inputs, non_image_inputs, rnn_hxs, masks)
-        dist = self.dist(actor_features)
+
+        ####
+
+        discrete_dist = self.dist_dis(actor_features)
+        con_dist = self.dist_con(actor_features)
 
         if deterministic:
-            action = dist.mode()
+            discrete_action = discrete_dist.mode()
+            continous_action = con_dist.mode()
         else:
-            action = dist.sample()
+            discrete_action = discrete_dist.sample()
+            continous_action = con_dist.sample()
 
-        action_log_probs = dist.log_probs(action)
-        dist_entropy = dist.entropy().mean()
+        action_log_probs = con_dist.log_probs(continous_action) + discrete_dist.log_probs(discrete_action)
 
-        return value, action, action_log_probs, rnn_hxs
+        con_dist_entropy = con_dist.entropy().mean()
+        discrete_dist_entropy = discrete_dist.entropy().mean()
+
+        ####
+
+        return value, discrete_action, continous_action, action_log_probs, rnn_hxs
     #######
 
     #######
@@ -89,12 +110,19 @@ class Policy(nn.Module):
     #######
 
     #######
-    def evaluate_actions(self, image_inputs, non_image_inputs, rnn_hxs, masks, action):
+    def evaluate_actions(self, image_inputs, non_image_inputs, rnn_hxs, masks, dis_action , con_action):
         value, actor_features, rnn_hxs = self.base(image_inputs, non_image_inputs, rnn_hxs, masks)
-        dist = self.dist(actor_features)
 
-        action_log_probs = dist.log_probs(action)
-        dist_entropy = dist.entropy().mean()
+        #######
+        discrete_dist = self.dist_dis(actor_features)
+        con_dist = self.dist_con(actor_features)
+        #######
+
+        #######
+
+        action_log_probs = con_dist.log_probs(dis_action) + discrete_dist.log_probs(con_action)
+        dist_entropy = discrete_dist.entropy().mean() + con_dist.entropy().mean()
+        #######
 
         return value, action_log_probs, dist_entropy, rnn_hxs
     #######
