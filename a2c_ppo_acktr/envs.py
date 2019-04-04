@@ -183,9 +183,14 @@ class VecPyTorch(VecEnvWrapper):
         self.device = device
         # TODO: Fix data types
 
+    ########
+
     def reset(self):
         obs = self.venv.reset()
-        obs = torch.from_numpy(obs).float().to(self.device)
+
+        obs = {'feature_screen': torch.from_numpy(obs['feature_screen']).float().to(self.device),
+               'info_discrete': torch.from_numpy(obs['info_discrete']).float().to(self.device)
+               }
         return obs
 
     def step_async(self, actions):
@@ -195,11 +200,19 @@ class VecPyTorch(VecEnvWrapper):
         actions = actions.cpu().numpy()
         self.venv.step_async(actions)
 
+    ########
+
+    ########
+
     def step_wait(self):
         obs, reward, done, info = self.venv.step_wait()
-        obs = torch.from_numpy(obs).float().to(self.device)
+        obs = {'feature_screen': torch.from_numpy(obs['feature_screen']).float().to(self.device),
+               'info_discrete': torch.from_numpy(obs['info_discrete']).float().to(self.device)
+               }
         reward = torch.from_numpy(reward).unsqueeze(dim=1).float()
         return obs, reward, done, info
+
+    ########
 
 
 class VecNormalize(VecNormalize_):

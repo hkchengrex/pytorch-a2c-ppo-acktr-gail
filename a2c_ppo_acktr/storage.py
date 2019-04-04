@@ -13,14 +13,12 @@ class RolloutStorage(object):
         ####
 
         image_shape = obs_shape.spaces['feature_screen'].shape
-        print(len(obs_shape.spaces))
-        non_image_shape = len(obs_shape.spaces) - 1
+        non_image_shape = obs_shape.spaces['info_discrete'].shape
 
         self.image = torch.zeros(num_steps + 1, num_processes, *image_shape)
-        self.non_image = torch.zeros(num_steps + 1, num_processes, non_image_shape)
+        self.non_image = torch.zeros(num_steps + 1, num_processes, *non_image_shape)
 
         ###
-
 
         self.recurrent_hidden_states = torch.zeros(
             num_steps + 1, num_processes, recurrent_hidden_state_size)
@@ -65,7 +63,6 @@ class RolloutStorage(object):
                value_preds, rewards, masks, bad_masks):
 
         ####
-
         self.image[self.step + 1].copy_(image)
         self.non_image[self.step + 1].copy_(non_image)
 

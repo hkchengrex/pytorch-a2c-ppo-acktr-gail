@@ -16,7 +16,6 @@ class Policy(nn.Module):
     def __init__(self, obs_shape, action_space, base=None, base_kwargs=None):
         super(Policy, self).__init__()
 
-
         '''
         if base_kwargs is None:
             base_kwargs = {}
@@ -31,8 +30,8 @@ class Policy(nn.Module):
         '''
 
         image_shape = obs_shape.spaces['feature_screen'].shape
-        non_image_shape = len(obs_shape.spaces) - 1
-        self.base = MixBase(image_shape[0], **base_kwargs)
+        non_image_shape = obs_shape.spaces['info_discrete'].shape
+        self.base = MixBase(image_shape[0], non_image_shape[0] , **base_kwargs)
 
         '''
         else:
@@ -65,7 +64,9 @@ class Policy(nn.Module):
     def forward(self, inputs, rnn_hxs, masks):
         raise NotImplementedError
 
+    #######
     def act(self, image_inputs, non_image_inputs, rnn_hxs, masks, deterministic=False):
+
         value, actor_features, rnn_hxs = self.base(image_inputs, non_image_inputs, rnn_hxs, masks)
         dist = self.dist(actor_features)
 
@@ -78,20 +79,25 @@ class Policy(nn.Module):
         dist_entropy = dist.entropy().mean()
 
         return value, action, action_log_probs, rnn_hxs
+    #######
 
+    #######
     def get_value(self, image_inputs, non_image_inputs, rnn_hxs, masks):
         value, _, _ = self.base(image_inputs, non_image_inputs, rnn_hxs, masks)
         return value
 
-    def evaluate_actions(self, inputs, rnn_hxs, masks, action):
-        value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
+    #######
+
+    #######
+    def evaluate_actions(self, image_inputs, non_image_inputs, rnn_hxs, masks, action):
+        value, actor_features, rnn_hxs = self.base(image_inputs, non_image_inputs, rnn_hxs, masks)
         dist = self.dist(actor_features)
 
         action_log_probs = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
         return value, action_log_probs, dist_entropy, rnn_hxs
-
+    #######
 
 class NNBase(nn.Module):
     def __init__(self, recurrent, recurrent_input_size, hidden_size):
@@ -244,31 +250,30 @@ class MLPBase(NNBase):
 
 
 class MixBase(NNBase):
-    def __init__(self, num_inputs, recurrent=False, hidden_size=512):
+    def __init__(self, num_image_inputs, num_non_image_inputs, recurrent=False, hidden_size=512):
         super(MixBase, self).__init__(recurrent, hidden_size, hidden_size)
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), nn.init.calculate_gain('relu'))
 
         self.main = nn.Sequential(
-            init_(nn.Conv2d(num_inputs, 32, 8, stride=4)), nn.ReLU(),
+            init_(nn.Conv2d(num_image_inputs, 32, 8, stride=4)), nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
             init_(nn.Conv2d(64, 32, 3, stride=1)), nn.ReLU(), Flatten(),
             init_(nn.Linear(32 * 7 * 7, hidden_size)), nn.ReLU())
 
-        if recurrent:
-            num_inputs = hidden_size
-
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0))
+                               constant_(x, 0), np.sqrt(2))
 
         self.actor = nn.Sequential(
-            init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
+            init_(nn.Linear(hidden_size + num_non_image_inputs, hidden_size)), nn.Tanh(),
             init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh())
 
         self.critic = nn.Sequential(
-            init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
+            init_(nn.Linear(hidden_size + num_non_image_inputs, hidden_size)), nn.Tanh(),
             init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh())
+
+        self.critic_linear = init_(nn.Linear(hidden_size, 1))
 
         self.train()
 
