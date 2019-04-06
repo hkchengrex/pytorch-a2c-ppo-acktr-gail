@@ -2,7 +2,6 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="2eee514f-c217-4dea-80c3-ea6ece3bbb7c" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/a2c_ppo_acktr/model.py" beforeDir="false" afterPath="$PROJECT_DIR$/a2c_ppo_acktr/model.py" afterDir="false" />
     </list>
@@ -60,11 +59,11 @@
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="false">
+      <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/a2c_ppo_acktr/model.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="290">
-              <caret line="287" column="23" lean-forward="true" selection-start-line="287" selection-start-column="23" selection-end-line="287" selection-end-column="23" />
+            <state relative-caret-position="253">
+              <caret line="328" column="25" lean-forward="true" selection-start-line="328" selection-start-column="25" selection-end-line="328" selection-end-column="25" />
               <folding>
                 <element signature="e#0#18#0" expanded="true" />
               </folding>
@@ -72,11 +71,11 @@
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="true">
+      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/.gitignore">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="480">
-              <caret line="280" selection-start-line="280" selection-end-line="280" />
+            <state relative-caret-position="6825">
+              <caret line="455" selection-start-line="455" selection-end-line="455" />
             </state>
           </provider>
         </entry>
@@ -119,8 +118,8 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/a2c_ppo_acktr/envs.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="331">
-              <caret line="205" lean-forward="true" selection-start-line="205" selection-end-line="205" />
+            <state relative-caret-position="2850">
+              <caret line="205" selection-start-line="205" selection-end-line="205" />
               <folding>
                 <element signature="e#0#9#0" expanded="true" />
               </folding>
@@ -144,8 +143,6 @@
   </component>
   <component name="FindInProjectRecents">
     <findStrings>
-      <find>copy_</find>
-      <find>obs_batch</find>
       <find>RolloutStorage</find>
       <find>self.obs</find>
       <find>obs</find>
@@ -171,9 +168,11 @@
       <find>print</find>
       <find>embed_screen</find>
       <find>float</find>
-      <find>init_embed_obs</find>
       <find>VecPyTorch</find>
       <find>features.SCREEN_FEATURES</find>
+      <find>embed_obs</find>
+      <find>init_embed_obs</find>
+      <find>MixBase</find>
     </findStrings>
   </component>
   <component name="Git.Settings">
@@ -184,8 +183,8 @@
       <list>
         <option value="$PROJECT_DIR$/a2c_ppo_acktr/storage.py" />
         <option value="$PROJECT_DIR$/a2c_ppo_acktr/envs.py" />
-        <option value="$PROJECT_DIR$/a2c_ppo_acktr/model.py" />
         <option value="$PROJECT_DIR$/.gitignore" />
+        <option value="$PROJECT_DIR$/a2c_ppo_acktr/model.py" />
       </list>
     </option>
   </component>
@@ -296,23 +295,24 @@
       <workItem from="1554355148605" duration="13401000" />
       <workItem from="1554432048973" duration="6000" />
       <workItem from="1554481153150" duration="672000" />
-      <workItem from="1554481932595" duration="7690000" />
+      <workItem from="1554481932595" duration="8690000" />
+      <workItem from="1554555223223" duration="2156000" />
     </task>
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="42299000" />
+    <option name="totallyTimeSpent" value="45455000" />
   </component>
   <component name="ToolWindowManager">
     <frame x="65" y="-4" width="1535" height="904" extended-state="6" />
     <editor active="true" />
     <layout>
-      <window_info active="true" content_ui="combo" id="Project" order="0" visible="true" weight="0.24445938" />
+      <window_info active="true" content_ui="combo" id="Project" order="0" visible="true" weight="0.24781732" />
       <window_info id="Structure" order="1" side_tool="true" weight="0.25" />
       <window_info id="Favorites" order="2" side_tool="true" />
       <window_info anchor="bottom" id="Message" order="0" />
       <window_info anchor="bottom" id="Find" order="1" />
-      <window_info anchor="bottom" id="Run" order="2" visible="true" weight="0.32958803" />
+      <window_info anchor="bottom" id="Run" order="2" weight="0.32958803" />
       <window_info anchor="bottom" id="Debug" order="3" weight="0.4" />
       <window_info anchor="bottom" id="Cvs" order="4" weight="0.25" />
       <window_info anchor="bottom" id="Inspection" order="5" weight="0.4" />
@@ -321,7 +321,7 @@
       <window_info anchor="bottom" id="Version Control" order="8" />
       <window_info anchor="bottom" id="Database Changes" order="9" />
       <window_info anchor="bottom" id="Event Log" order="10" side_tool="true" />
-      <window_info anchor="bottom" id="Terminal" order="11" weight="0.29213482" />
+      <window_info anchor="bottom" id="Terminal" order="11" visible="true" weight="0.28214732" />
       <window_info anchor="bottom" id="Python Console" order="12" />
       <window_info anchor="right" id="Commander" internal_type="SLIDING" order="0" type="SLIDING" weight="0.4" />
       <window_info anchor="right" id="Ant Build" order="1" weight="0.25" />
@@ -373,6 +373,13 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/.gitignore">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="6825">
+          <caret line="455" selection-start-line="455" selection-end-line="455" />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/a2c_ppo_acktr/algo/ppo.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="1050">
@@ -402,6 +409,16 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/a2c_ppo_acktr/envs.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="2850">
+          <caret line="205" selection-start-line="205" selection-end-line="205" />
+          <folding>
+            <element signature="e#0#9#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/a2c_ppo_acktr/algo/a2c_acktr.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="555">
@@ -412,30 +429,13 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/a2c_ppo_acktr/envs.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="331">
-          <caret line="205" lean-forward="true" selection-start-line="205" selection-end-line="205" />
-          <folding>
-            <element signature="e#0#9#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/a2c_ppo_acktr/model.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="290">
-          <caret line="287" column="23" lean-forward="true" selection-start-line="287" selection-start-column="23" selection-end-line="287" selection-end-column="23" />
+        <state relative-caret-position="253">
+          <caret line="328" column="25" lean-forward="true" selection-start-line="328" selection-start-column="25" selection-end-line="328" selection-end-column="25" />
           <folding>
             <element signature="e#0#18#0" expanded="true" />
           </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/.gitignore">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="480">
-          <caret line="280" selection-start-line="280" selection-end-line="280" />
         </state>
       </provider>
     </entry>

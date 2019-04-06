@@ -17,7 +17,7 @@ class Flatten(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, obs_shape, action_space, map_features, base=None, base_kwargs=None):
+    def __init__(self, obs_shape, action_space, map_features, flat_features, base=None, base_kwargs=None):
         super(Policy, self).__init__()
 
         '''
@@ -35,7 +35,7 @@ class Policy(nn.Module):
         ###
         image_shape = obs_shape.spaces['feature_screen'].shape
         non_image_shape = obs_shape.spaces['info_discrete'].shape
-        self.base = MixBase(image_shape[0], non_image_shape[0], map_features, **base_kwargs)
+        self.base = MixBase(image_shape[0], non_image_shape[0], map_features, flat_features, **base_kwargs)
         ###
 
         '''
@@ -104,6 +104,7 @@ class Policy(nn.Module):
         ####
 
         return value, discrete_action, continous_action, action_log_probs, rnn_hxs
+
     #######
 
     #######
@@ -114,7 +115,7 @@ class Policy(nn.Module):
     #######
 
     #######
-    def evaluate_actions(self, image_inputs, non_image_inputs, rnn_hxs, masks, dis_action , con_action):
+    def evaluate_actions(self, image_inputs, non_image_inputs, rnn_hxs, masks, dis_action, con_action):
         value, actor_features, rnn_hxs = self.base(image_inputs, non_image_inputs, rnn_hxs, masks)
 
         #######
@@ -130,6 +131,7 @@ class Policy(nn.Module):
 
         return value, action_log_probs, dist_entropy, rnn_hxs
     #######
+
 
 class NNBase(nn.Module):
     def __init__(self, recurrent, recurrent_input_size, hidden_size):
@@ -282,10 +284,14 @@ class MLPBase(NNBase):
 
 
 class MixBase(NNBase):
-    def __init__(self, num_image_inputs, num_non_image_inputs, map_features, recurrent=False, hidden_size=512):
+    def __init__(self, num_image_inputs, num_non_image_inputs, map_features, flat_features, recurrent=False, hidden_size=512):
         super(MixBase, self).__init__(recurrent, hidden_size, hidden_size)
 
         self.map_features = map_features
+        self.flat_features = flat_features
+        self.num_image_inputs = num_image_inputs
+        self.num_non_image_inputs = num_non_image_inputs
+        print(self.num_non_image_inputs)
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), nn.init.calculate_gain('relu'))
@@ -298,33 +304,40 @@ class MixBase(NNBase):
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), np.sqrt(2))
 
-        state_channels = 32 + 1  # stacking screen, info
+        state_channels = 32 + num_non_image_inputs  # stacking screen, info
         self.fc = nn.Sequential(init_(nn.Linear(78 * 78 * state_channels, 256)), nn.ReLU())
 
-        self.actor = nn.Sequential( init_(nn.Linear(256, hidden_size)), nn.Tanh())
-        self.critic = nn.Sequential( init_(nn.Linear(256, 1)), nn.Tanh())
-        self.embed_screen = self.init_embed_obs(self._embed_spatial)
+        self.actor = nn.Sequential(init_(nn.Linear(256, hidden_size)), nn.Tanh())
+        self.critic = nn.Sequential(init_(nn.Linear(256, 1)), nn.Tanh())
+        self.embed_screen = self.init_embed_obs(features.SCREEN_FEATURES, self._embed_spatial)
+
+        self.embed_flat = self.init_embed_obs(self.flat_features, self._embed_flat)
 
         self.train()
-
 
     def forward(self, inputs_image, inputs_non_image, rnn_hxs, masks):
 
         embed_screen = self.embed_obs(inputs_image, self.embed_screen, self.make_one_hot_2d)
+        embed_flat = self.embed_obs_flat(inputs_non_image, self.embed_flat, self.make_one_hot_1d)
+
         # Spatial Convnet
         inputs_image = self.main(embed_screen)
 
-        # Non Spatial Vector BroadCast
+        '''
         x = Variable(
             inputs_non_image.repeat(
-                inputs_non_image.shape[0], math.ceil(inputs_image.shape[2] * inputs_image.shape[3] / inputs_non_image.shape[0])
+                inputs_non_image.shape[0],
+                math.ceil(inputs_image.shape[2] * inputs_image.shape[3] / inputs_non_image.shape[0])
             ).resize_(
                 inputs_non_image.shape[0], 1, inputs_image.shape[2], inputs_image.shape[3]
             )
         )
+        '''
+        # Non Spatial Vector BroadCast
+        embed_flat = embed_flat.unsqueeze(2).unsqueeze(3).expand(embed_flat.size(0), embed_flat.size(1), 78, 78)
 
         # Concat Obervation
-        x_state = torch.cat((inputs_image, x), dim=1)  # concat along channel dimension
+        x_state = torch.cat((inputs_image, embed_flat), dim=1)  # concat along channel dimension
 
         # Non Spatial
         non_spatial = x_state.view(x_state.shape[0], -1)
@@ -338,13 +351,39 @@ class MixBase(NNBase):
 
         return value, non_spatial_policy, rnn_hxs
 
-    def init_embed_obs(self, embed_fn):
+    def _embed_flat(self, in_, out_):
+        return self._linear_init(in_, out_)
+
+    def _linear_init(self, in_, out_):
+        relu_gain = nn.init.calculate_gain('relu')
+        linear = nn.Linear(in_, out_)
+        linear.weight.data.mul_(relu_gain)
+        return nn.DataParallel(linear)
+
+    def make_one_hot_1d(self, labels, dtype, C=2):
+        '''
+        Reference: https://lirnli.wordpress.com/2017/09/03/one-hot-encoding-in-pytorch/
+        Parameters
+        ----------
+        labels : N, where N is batch size.
+        dtype: Cuda or not
+        C : number of classes in labels.
+
+        Returns
+        -------
+        target : N x C
+        '''
+        out = Variable(dtype(labels.size(0), C).zero_())
+        index = labels.contiguous().view(-1, 1).long()
+        return out.scatter_(1, index, 1)
+
+    def init_embed_obs(self, spec, embed_fn):
         """
             Define network architectures
             Each input channel is processed by a Sequential network
         """
         out_sequence = {}
-        for s in features.SCREEN_FEATURES:
+        for s in spec:
             if s.type == features.FeatureType.CATEGORICAL:
                 dims = np.round(np.log2(s.scale)).astype(np.int32).item()
                 ###
@@ -384,9 +423,32 @@ class MixBase(NNBase):
             Embed observation channels
         """
         # Channel dimension is 1
-        feats = torch.chunk(obs, len(features.SCREEN_FEATURES), dim=1)
+        feats = torch.chunk(obs, self.num_image_inputs, dim=1)
         out_list = []
+        i = 0
         for feat, s in zip(feats, self.map_features):
+            if s.type == features.FeatureType.CATEGORICAL:
+                dims = np.round(np.log2(s.scale)).astype(np.int32).item()
+                dims = max(dims, 1)
+                indices = one_hot(feat, torch.cuda.FloatTensor, C=s.scale)
+                out = networks[s.index](indices.float())
+            elif s.type == features.FeatureType.SCALAR:
+                out = self._log_transform(feat, s.scale)
+            else:
+                raise NotImplementedError
+            out_list.append(out)
+            i += 1
+        # Channel dimension is 1
+        return torch.cat(out_list, 1)
+
+    def embed_obs_flat(self, obs, networks, one_hot):
+        """
+            Embed observation channels
+        """
+        # Channel dimension is 1
+        feats = torch.chunk(obs, self.num_non_image_inputs, dim=1)
+        out_list = []
+        for feat, s in zip(feats, self.flat_features):
             if s.type == features.FeatureType.CATEGORICAL:
                 dims = np.round(np.log2(s.scale)).astype(np.int32).item()
                 dims = max(dims, 1)
@@ -402,6 +464,3 @@ class MixBase(NNBase):
 
     def _log_transform(self, x, scale):
         return torch.log(8 * x / scale + 1)
-
-
-
