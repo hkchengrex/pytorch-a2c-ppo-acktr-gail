@@ -2,9 +2,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable
+import math
 
 from a2c_ppo_acktr.distributions import Bernoulli, Categorical, DiagGaussian
 from a2c_ppo_acktr.utils import init
+from pysc2.lib import actions
+from pysc2.lib import features
 
 
 class Flatten(nn.Module):
@@ -13,7 +17,7 @@ class Flatten(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, obs_shape, action_space, base=None, base_kwargs=None):
+    def __init__(self, obs_shape, action_space, map_features, base=None, base_kwargs=None):
         super(Policy, self).__init__()
 
         '''
@@ -31,7 +35,7 @@ class Policy(nn.Module):
         ###
         image_shape = obs_shape.spaces['feature_screen'].shape
         non_image_shape = obs_shape.spaces['info_discrete'].shape
-        self.base = MixBase(image_shape[0], non_image_shape[0], **base_kwargs)
+        self.base = MixBase(image_shape[0], non_image_shape[0], map_features, **base_kwargs)
         ###
 
         '''
@@ -278,44 +282,126 @@ class MLPBase(NNBase):
 
 
 class MixBase(NNBase):
-    def __init__(self, num_image_inputs, num_non_image_inputs, recurrent=False, hidden_size=512):
+    def __init__(self, num_image_inputs, num_non_image_inputs, map_features, recurrent=False, hidden_size=512):
         super(MixBase, self).__init__(recurrent, hidden_size, hidden_size)
+
+        self.map_features = map_features
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), nn.init.calculate_gain('relu'))
 
         self.main = nn.Sequential(
-            init_(nn.Conv2d(num_image_inputs, 32, 8, stride=4)), nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)), nn.ReLU(), Flatten(),
-            init_(nn.Linear(32 * 7 * 7, hidden_size)), nn.ReLU())
+            init_(nn.Conv2d(num_image_inputs, 16, 5, stride=1)), nn.ReLU(),
+            init_(nn.Conv2d(16, 32, 3, stride=1)), nn.ReLU(),
+        )
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), np.sqrt(2))
 
-        self.actor = nn.Sequential(
-            init_(nn.Linear(hidden_size + num_non_image_inputs, hidden_size)), nn.Tanh(),
-            init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh())
+        state_channels = 32 + 1  # stacking screen, info
+        self.fc = nn.Sequential(init_(nn.Linear(78 * 78 * state_channels, 256)), nn.ReLU())
 
-        self.critic = nn.Sequential(
-            init_(nn.Linear(hidden_size + num_non_image_inputs, hidden_size)), nn.Tanh(),
-            init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh())
-
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
+        self.actor = nn.Sequential( init_(nn.Linear(256, hidden_size)), nn.Tanh())
+        self.critic = nn.Sequential( init_(nn.Linear(256, 1)), nn.Tanh())
+        self.embed_screen = self.init_embed_obs(self._embed_spatial)
 
         self.train()
 
+
     def forward(self, inputs_image, inputs_non_image, rnn_hxs, masks):
-        c = self.main(inputs_image / 255.0)
-        x = inputs_non_image
 
-        x = torch.cat((c.view(c.size(0), -1),
-                       x.view(x.size(0), -1)), dim=1)
+        embed_screen = self.embed_obs(inputs_image, self.embed_screen, self.make_one_hot_2d)
+        # Spatial Convnet
+        inputs_image = self.main(embed_screen)
 
-        if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+        # Non Spatial Vector BroadCast
+        x = Variable(
+            inputs_non_image.repeat(
+                inputs_non_image.shape[0], math.ceil(inputs_image.shape[2] * inputs_image.shape[3] / inputs_non_image.shape[0])
+            ).resize_(
+                inputs_non_image.shape[0], 1, inputs_image.shape[2], inputs_image.shape[3]
+            )
+        )
 
-        hidden_critic = self.critic(x)
-        hidden_actor = self.actor(x)
+        # Concat Obervation
+        x_state = torch.cat((inputs_image, x), dim=1)  # concat along channel dimension
 
-        return self.critic_linear(hidden_critic), hidden_actor, rnn_hxs
+        # Non Spatial
+        non_spatial = x_state.view(x_state.shape[0], -1)
+        non_spatial = self.fc(non_spatial)
+
+        # Policy Out
+        non_spatial_policy = self.actor(non_spatial)
+
+        # Critic Out
+        value = self.critic(non_spatial)
+
+        return value, non_spatial_policy, rnn_hxs
+
+    def init_embed_obs(self, embed_fn):
+        """
+            Define network architectures
+            Each input channel is processed by a Sequential network
+        """
+        out_sequence = {}
+        for s in features.SCREEN_FEATURES:
+            if s.type == features.FeatureType.CATEGORICAL:
+                dims = np.round(np.log2(s.scale)).astype(np.int32).item()
+                ###
+                dims = max(dims, 1)
+                ###
+                sequence = nn.DataParallel(nn.Sequential(
+                    embed_fn(s.scale, 1),
+                    nn.ReLU(True)))
+                out_sequence[s.index] = sequence
+        return out_sequence
+
+    def _embed_spatial(self, in_, out_):
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
+                               constant_(x, 0), nn.init.calculate_gain('relu'))
+        return init_(nn.Conv2d(in_, out_, kernel_size=1, stride=1, padding=0))
+
+    def make_one_hot_2d(self, labels, dtype, C=2):
+        '''
+        Reference: http://jacobkimmel.github.io/pytorch_onehot/
+        Parameters
+        ----------
+        labels : torch.autograd.Variable of torch.LongTensor
+            N x 1 x H x W, where N is batch size.
+        dtype: Cuda or not
+        C : number of classes in labels.
+
+        Returns
+        -------
+        target : N x C x H x W
+        '''
+        one_hot = Variable(dtype(labels.size(0), C, labels.size(2), labels.size(3)).zero_())
+        target = one_hot.scatter_(1, labels.long(), 1)
+        return target
+
+    def embed_obs(self, obs, networks, one_hot):
+        """
+            Embed observation channels
+        """
+        # Channel dimension is 1
+        feats = torch.chunk(obs, len(features.SCREEN_FEATURES), dim=1)
+        out_list = []
+        for feat, s in zip(feats, self.map_features):
+            if s.type == features.FeatureType.CATEGORICAL:
+                dims = np.round(np.log2(s.scale)).astype(np.int32).item()
+                dims = max(dims, 1)
+                indices = one_hot(feat, torch.cuda.FloatTensor, C=s.scale)
+                out = networks[s.index](indices.float())
+            elif s.type == features.FeatureType.SCALAR:
+                out = self._log_transform(feat, s.scale)
+            else:
+                raise NotImplementedError
+            out_list.append(out)
+        # Channel dimension is 1
+        return torch.cat(out_list, 1)
+
+    def _log_transform(self, x, scale):
+        return torch.log(8 * x / scale + 1)
+
+
+
