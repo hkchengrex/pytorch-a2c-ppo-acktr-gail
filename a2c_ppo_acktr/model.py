@@ -60,8 +60,10 @@ class Policy(nn.Module):
         '''
 
         ###
-        num_outputs = action_space.spaces['discrete_output'].shape[0]
-        self.dist_dis = Bernoulli(self.base.output_size, num_outputs)
+        self.dist_dis = []
+        self.num_outputs_dis = action_space.spaces['discrete_output'].nvec
+        for i in range(len(self.num_outputs_dis)):
+            self.dist_dis.append(Categorical(self.base.output_size, self.num_outputs_dis[i]))
 
         num_outputs = action_space.spaces['continous_output'].shape[0]
         self.dist_con = DiagGaussian(self.base.output_size, num_outputs)
@@ -84,9 +86,22 @@ class Policy(nn.Module):
 
         value, actor_features, rnn_hxs = self.base(image_inputs, non_image_inputs, rnn_hxs, masks)
 
+        con_dist = self.dist_con(actor_features)
         ####
+        discrete_dist = []
+        discrete_action = []
+        for i in range(len(self.num_outputs_dis)):
+            discrete_dist.append(self.dist_dis[i](actor_features.cpu()))
+            if deterministic:
+                discrete_action.append(discrete_dist[i].mode())
+            else:
+                discrete_action.append(discrete_dist[i].sample())
 
-        discrete_dist = self.dist_dis(actor_features)
+        if deterministic:
+            continous_action = con_dist.mode()
+        else:
+            continous_action = con_dist.sample()
+        '''
         con_dist = self.dist_con(actor_features)
 
         if deterministic:
@@ -95,14 +110,20 @@ class Policy(nn.Module):
         else:
             discrete_action = discrete_dist.sample()
             continous_action = con_dist.sample()
+        '''
 
-        action_log_probs = con_dist.log_probs(continous_action) + discrete_dist.log_probs(discrete_action)
+        action_log_probs = con_dist.log_probs(continous_action)
 
+        for i in range(len(self.num_outputs_dis)):
+            action_log_probs += discrete_dist[i].log_probs(discrete_action[i]).cuda()
+
+        '''
         con_dist_entropy = con_dist.entropy().mean()
         discrete_dist_entropy = discrete_dist.entropy().mean()
-
+        '''
         ####
-
+        b = torch.LongTensor(2, 5)
+        discrete_action = torch.cat(discrete_action, out=b, dim=1)
         return value, discrete_action, continous_action, action_log_probs, rnn_hxs
 
     #######
@@ -119,14 +140,21 @@ class Policy(nn.Module):
         value, actor_features, rnn_hxs = self.base(image_inputs, non_image_inputs, rnn_hxs, masks)
 
         #######
-        discrete_dist = self.dist_dis(actor_features)
+        discrete_dist = []
+        for i in range(len(self.num_outputs_dis)):
+            discrete_dist.append(self.dist_dis[i](actor_features.cpu()))
         con_dist = self.dist_con(actor_features)
         #######
 
         #######
 
-        action_log_probs = con_dist.log_probs(dis_action) + discrete_dist.log_probs(con_action)
-        dist_entropy = discrete_dist.entropy().mean() + con_dist.entropy().mean()
+        action_log_probs = con_dist.log_probs(con_action)
+        for i in range(len(self.num_outputs_dis)):
+            action_log_probs += discrete_dist[i].log_probs(dis_action[:,i].cpu()).cuda()
+
+        dist_entropy = con_dist.entropy().mean()
+        for i in range(len(self.num_outputs_dis)):
+            dist_entropy += discrete_dist[i].entropy().mean().cuda()
         #######
 
         return value, action_log_probs, dist_entropy, rnn_hxs
