@@ -122,7 +122,7 @@ class Policy(nn.Module):
         discrete_dist_entropy = discrete_dist.entropy().mean()
         '''
         ####
-        b = torch.LongTensor(2, 5)
+        b = torch.LongTensor(discrete_action[0].shape[0], len(self.num_outputs_dis))
         discrete_action = torch.cat(discrete_action, out=b, dim=1)
         return value, discrete_action, continous_action, action_log_probs, rnn_hxs
 
