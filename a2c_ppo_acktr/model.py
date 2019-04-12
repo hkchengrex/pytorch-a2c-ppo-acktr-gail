@@ -348,7 +348,7 @@ class MixBase(NNBase):
         self.critic = nn.Sequential(init_(nn.Linear(256, 1)), nn.Tanh())
 
         ## Embedding Layer
-        self.embed_screen = self.init_embed_obs(features.SCREEN_FEATURES, self._embed_spatial)
+        self.embed_screen = self.init_embed_obs(self.map_features, self._embed_spatial)
         self.embed_flat = self.init_embed_obs(self.flat_features, self._embed_flat)
 
         self.train()
@@ -422,6 +422,7 @@ class MixBase(NNBase):
             Each input channel is processed by a Sequential network
         """
         out_sequence = {}
+        i = 0
         for s in spec:
             if s.type == features.FeatureType.CATEGORICAL:
                 dims = np.round(np.log2(s.scale)).astype(np.int32).item()
@@ -431,7 +432,8 @@ class MixBase(NNBase):
                 sequence = nn.DataParallel(nn.Sequential(
                     embed_fn(s.scale, 1),
                     nn.ReLU(True)))
-                out_sequence[s.index] = sequence
+                out_sequence[i] = sequence
+                i+=1
         return out_sequence
 
     def _embed_spatial(self, in_, out_):
@@ -470,13 +472,14 @@ class MixBase(NNBase):
                 dims = np.round(np.log2(s.scale)).astype(np.int32).item()
                 dims = max(dims, 1)
                 indices = one_hot(feat, torch.cuda.FloatTensor, C=s.scale)
-                out = networks[s.index](indices.float())
+                out = networks[i](indices.float())
+                i += 1
             elif s.type == features.FeatureType.SCALAR:
                 out = self._log_transform(feat, s.scale)
             else:
                 raise NotImplementedError
             out_list.append(out)
-            i += 1
+
         # Channel dimension is 1
         return torch.cat(out_list, 1)
 
@@ -487,12 +490,14 @@ class MixBase(NNBase):
         # Channel dimension is 1
         feats = torch.chunk(obs, self.num_non_image_inputs, dim=1)
         out_list = []
+        i = 0
         for feat, s in zip(feats, self.flat_features):
             if s.type == features.FeatureType.CATEGORICAL:
                 dims = np.round(np.log2(s.scale)).astype(np.int32).item()
                 dims = max(dims, 1)
                 indices = one_hot(feat, torch.cuda.FloatTensor, C=s.scale)
-                out = networks[s.index](indices.float())
+                out = networks[i](indices.float())
+                i += 1
             elif s.type == features.FeatureType.SCALAR:
                 out = self._log_transform(feat, s.scale)
             else:

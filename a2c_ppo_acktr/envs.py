@@ -47,7 +47,9 @@ def make_env(env_id, seed, rank, log_dir, allow_early_resets):
             rgb_screen=None,
             rgb_minimap=None,
             action_space='FEATURES',
-            use_feature_units=True)
+            use_feature_units=True,
+            use_raw_units=True
+        )
 
         is_atari = hasattr(gym.envs, 'atari') and isinstance(
             env.unwrapped, gym.envs.atari.atari_env.AtariEnv)
