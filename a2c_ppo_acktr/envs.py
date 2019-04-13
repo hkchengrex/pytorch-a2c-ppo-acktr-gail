@@ -39,18 +39,6 @@ def make_env(env_id, seed, rank, log_dir, allow_early_resets):
         else:
             env = gym.make(env_id)
 
-        env.settings['visualize'] = False
-        env.settings['step_mul'] = 8
-        env.settings['agent_interface_format'] = sc2_env.parse_agent_interface_format(
-            feature_screen=84,
-            feature_minimap=84,
-            rgb_screen=None,
-            rgb_minimap=None,
-            action_space='FEATURES',
-            use_feature_units=True,
-            use_raw_units=True
-        )
-
         is_atari = hasattr(gym.envs, 'atari') and isinstance(
             env.unwrapped, gym.envs.atari.atari_env.AtariEnv)
         if is_atari:
