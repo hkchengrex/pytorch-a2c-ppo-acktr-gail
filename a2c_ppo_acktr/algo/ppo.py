@@ -65,6 +65,10 @@ class PPO():
                                     1.0 + self.clip_param) * adv_targ
                 action_loss = -torch.min(surr1, surr2).mean()
 
+                # print('log prob ', action_log_probs)
+                # print('Sur ', surr1, surr2)
+                # print('a loss ', action_loss)
+
                 if self.use_clipped_value_loss:
                     value_pred_clipped = value_preds_batch + \
                         (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
@@ -79,9 +83,20 @@ class PPO():
                 self.optimizer.zero_grad()
                 (value_loss * self.value_loss_coef + action_loss -
                  dist_entropy * self.entropy_coef).backward()
-                nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
-                                         self.max_grad_norm)
+
+                # print((value_loss * self.value_loss_coef + action_loss -
+                #  dist_entropy * self.entropy_coef).mean())
+                # print(self.actor_critic.base.fc[0].weight.grad.mean())
+                # print(self.actor_critic.base.fc[0].weight.mean(1))
+
+                # nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
+                #                          self.max_grad_norm)
+
+                # print(self.actor_critic.base.fc[0].weight.grad.mean())
                 self.optimizer.step()
+                # print(self.optimizer.param_groups)
+                # print('para', list(self.actor_critic.parameters())[0].mean())
+                # print('grad', list(self.actor_critic.parameters())[0].grad.mean())
 
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()

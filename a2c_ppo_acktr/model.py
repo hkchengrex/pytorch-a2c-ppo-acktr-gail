@@ -352,12 +352,12 @@ class MixBase(NNBase):
         self.num_non_image_inputs = num_non_image_inputs
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0), nn.init.calculate_gain('relu'))
+                               constant_(x, 0), nn.init.calculate_gain('leaky_relu'))
 
         ## Spatial Feature Convolution
         self.main = nn.Sequential(
-            init_(nn.Conv2d(num_image_inputs, 16, 5, stride=1)), nn.ReLU(),
-            init_(nn.Conv2d(16, 32, 3, stride=1)), nn.ReLU(),
+            init_(nn.Conv2d(num_image_inputs, 16, 5, stride=1)), nn.LeakyReLU(),
+            init_(nn.Conv2d(16, 32, 3, stride=1)), nn.LeakyReLU(),
         )
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
@@ -366,11 +366,11 @@ class MixBase(NNBase):
         ## Non Spatial FCN After Concat
         ## 32 is the number of the channels after spatial convolutions
         state_channels = 32 + num_non_image_inputs  # stacking screen, info
-        self.fc = nn.Sequential(init_(nn.Linear(78 * 78 * state_channels, 256)), nn.ReLU())
+        self.fc = nn.Sequential(init_(nn.Linear(78 * 78 * state_channels, 256)), nn.LeakyReLU())
 
         ## Final Critic and Actor Output Layer
-        self.actor = nn.Sequential(init_(nn.Linear(256, hidden_size)), nn.Tanh())
-        self.critic = nn.Sequential(init_(nn.Linear(256, 1)), nn.Tanh())
+        self.actor = nn.Sequential(init_(nn.Linear(256, hidden_size)))
+        self.critic = nn.Sequential(init_(nn.Linear(256, 1)))
 
         ## Embedding Layer
         self.embed_screen = self.init_embed_obs(self.map_features, self._embed_spatial)
@@ -386,6 +386,8 @@ class MixBase(NNBase):
 
         # Spatial Convolution
         embed_screen = self.main(embed_screen)
+
+        # print(self.fc[0].weight)
 
         '''
         x = Variable(
