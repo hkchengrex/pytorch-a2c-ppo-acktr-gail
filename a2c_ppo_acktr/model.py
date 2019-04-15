@@ -35,7 +35,7 @@ class Policy(nn.Module):
         ###
         image_shape = obs_shape.spaces['feature_screen'].shape
         non_image_shape = obs_shape.spaces['info_discrete'].shape
-        self.base = MixBase(image_shape[0], non_image_shape[0], map_features, flat_features, **base_kwargs)
+        self.base = nn.DataParallel(MixBase(image_shape[0], non_image_shape[0], map_features, flat_features, **base_kwargs))
         ###
 
         '''
@@ -63,23 +63,23 @@ class Policy(nn.Module):
         self.dist_dis = []
         self.num_outputs_dis = action_space.spaces['discrete_output'].nvec
         for i in range(len(self.num_outputs_dis)):
-            self.dist_dis.append(Categorical(self.base.output_size, self.num_outputs_dis[i]))
+            self.dist_dis.append(Categorical(self.base.module.output_size, self.num_outputs_dis[i]))
 
         num_outputs = action_space.spaces['continuous_output'].shape[0]
         if num_outputs == 0:
             self.dist_con = None
         else:
-            self.dist_con = DiagGaussian(self.base.output_size, num_outputs)
+            self.dist_con = DiagGaussian(self.base.module.output_size, num_outputs)
         ###
 
     @property
     def is_recurrent(self):
-        return self.base.is_recurrent
+        return self.base.module.is_recurrent
 
     @property
     def recurrent_hidden_state_size(self):
         """Size of rnn_hx."""
-        return self.base.recurrent_hidden_state_size
+        return self.base.module.recurrent_hidden_state_size
 
     def forward(self, inputs, rnn_hxs, masks):
         raise NotImplementedError
