@@ -60,7 +60,7 @@ class Policy(nn.Module):
         '''
 
         ###
-        self.dist_dis = []
+        self.dist_dis = nn.ModuleList()
         self.num_outputs_dis = action_space.spaces['discrete_output'].nvec
         for i in range(len(self.num_outputs_dis)):
             self.dist_dis.append(Categorical(self.base.module.output_size, self.num_outputs_dis[i]))
