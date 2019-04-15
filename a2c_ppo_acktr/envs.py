@@ -188,8 +188,12 @@ class VecPyTorch(VecEnvWrapper):
             # Squeeze the dimension for discrete actions
             actions = actions.squeeze(1)
         num_worker = len(actions["discrete_output"])
-        entire = [[actions["discrete_output"][i],
-                   actions["continous_output"][i]] for i in range(0, num_worker)]
+
+        if 'continuous_output' in actions:
+            entire = [[actions["discrete_output"][i],
+                       actions["continuous_output"][i]] for i in range(0, num_worker)]
+        else:
+            entire = [[actions["discrete_output"][i]] for i in range(0, num_worker)]
         self.venv.step_async(entire)
 
     ########

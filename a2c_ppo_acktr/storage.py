@@ -33,11 +33,11 @@ class RolloutStorage(object):
 
         self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
 
-        continous_output_shape = action_space.spaces['continous_output'].shape[0]
+        continuous_output_shape = action_space.spaces['continuous_output'].shape[0]
         discrete_output_shape = action_space.spaces['discrete_output'].shape[0]
 
         self.dis_actions = torch.zeros(num_steps, num_processes, discrete_output_shape)
-        self.con_actions = torch.zeros(num_steps, num_processes, continous_output_shape)
+        self.con_actions = torch.zeros(num_steps, num_processes, continuous_output_shape)
 
         ###
 
@@ -72,7 +72,9 @@ class RolloutStorage(object):
 
         self.action_log_probs = self.action_log_probs.to(device)
         self.dis_actions = self.dis_actions.to(device)
-        self.con_actions = self.con_actions.to(device)
+
+        if self.con_actions is not None:
+            self.con_actions = self.con_actions.to(device)
         ####
 
 
@@ -94,7 +96,10 @@ class RolloutStorage(object):
         ####
 
         self.dis_actions[self.step].copy_(dis_actions)
-        self.con_actions[self.step].copy_(con_actions)
+        if con_actions is not None:
+            self.con_actions[self.step].copy_(con_actions)
+        else:
+            self.con_actions = None
         self.action_log_probs[self.step].copy_(action_log_probs)
         ####
 
@@ -200,8 +205,11 @@ class RolloutStorage(object):
             dis_actions_batch = self.dis_actions.view(-1,
                                               self.dis_actions.size(-1))[indices]
 
-            con_actions_batch = self.con_actions.view(-1,
-                                              self.con_actions.size(-1))[indices]
+            if self.con_actions is not None:
+                con_actions_batch = self.con_actions.view(-1,
+                                                  self.con_actions.size(-1))[indices]
+            else:
+                con_actions_batch = None
 
             ###
 
@@ -264,7 +272,10 @@ class RolloutStorage(object):
 
                 ###
                 dis_actions_batch.append(self.dis_actions[:, ind])
-                con_actions_batch.append(self.con_actions[:, ind])
+                if self.con_actions is not None:
+                    con_actions_batch.append(self.con_actions[:, ind])
+                else:
+                    con_actions_batch = None
                 ###
 
                 value_preds_batch.append(self.value_preds[:-1, ind])
@@ -286,7 +297,11 @@ class RolloutStorage(object):
             ###
 
             dis_actions_batch = torch.stack(dis_actions_batch, 1)
-            con_actions_batch = torch.stack(con_actions_batch, 1)
+
+            if con_actions_batch is not None:
+                con_actions_batch = torch.stack(con_actions_batch, 1)
+            else:
+                con_actions_batch = None
 
             ###
 
@@ -310,7 +325,11 @@ class RolloutStorage(object):
 
             ####
             dis_actions_batch = _flatten_helper(T, N, dis_actions_batch)
-            con_actions_batch = _flatten_helper(T, N, con_actions_batch)
+
+            if con_actions_batch is not None:
+                con_actions_batch = _flatten_helper(T, N, con_actions_batch)
+            else:
+                con_actions_batch = None
             ####
 
             value_preds_batch = _flatten_helper(T, N, value_preds_batch)
