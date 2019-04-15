@@ -372,7 +372,7 @@ class MixBase(NNBase):
                                     nn.LeakyReLU(), )
 
         ## Final Critic and Actor Output Layer
-        self.actor = nn.Sequential()
+        self.actor = nn.Sequential(init_(nn.Linear(256, 256)))
         self.critic = nn.Sequential(init_(nn.Linear(256, 1)))
 
         ## Embedding Layer
