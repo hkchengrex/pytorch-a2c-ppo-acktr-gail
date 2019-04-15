@@ -97,7 +97,7 @@ class Policy(nn.Module):
         discrete_dist = []
         discrete_action = []
         for i in range(len(self.num_outputs_dis)):
-            discrete_dist.append(self.dist_dis[i](actor_features.cpu()))
+            discrete_dist.append(self.dist_dis[i](actor_features))
             if deterministic:
                 discrete_action.append(discrete_dist[i].mode())
             else:
@@ -135,7 +135,7 @@ class Policy(nn.Module):
         discrete_dist_entropy = discrete_dist.entropy().mean()
         '''
         ####
-        b = torch.LongTensor(discrete_action[0].shape[0], len(self.num_outputs_dis))
+        b = torch.LongTensor(discrete_action[0].shape[0], len(self.num_outputs_dis)).cuda()
         discrete_action = torch.cat(discrete_action, out=b, dim=1)
         return value, discrete_action, continuous_action, action_log_probs, rnn_hxs
 
@@ -155,7 +155,7 @@ class Policy(nn.Module):
         #######
         discrete_dist = []
         for i in range(len(self.num_outputs_dis)):
-            discrete_dist.append(self.dist_dis[i](actor_features.cpu()))
+            discrete_dist.append(self.dist_dis[i](actor_features))
 
         if self.dist_con is not None:
             con_dist = self.dist_con(actor_features)
@@ -168,9 +168,9 @@ class Policy(nn.Module):
         if con_dist is not None:
             action_log_probs = con_dist.log_probs(con_action)
             for i in range(len(self.num_outputs_dis)):
-                action_log_probs += discrete_dist[i].log_probs(dis_action[:,i].cpu()).cuda()
+                action_log_probs += discrete_dist[i].log_probs(dis_action[:,i])
         else:
-            action_log_probs = sum([discrete_dist[i].log_probs(dis_action[:,i].cpu()).cuda()
+            action_log_probs = sum([discrete_dist[i].log_probs(dis_action[:,i])
                                     for i in range(len(self.num_outputs_dis))])
 
         if con_dist is not None:
