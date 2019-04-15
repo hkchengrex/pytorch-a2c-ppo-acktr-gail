@@ -47,6 +47,8 @@ def main():
         base_kwargs={'recurrent': args.recurrent_policy})
     actor_critic.to(device)
 
+    actor_critic = nn.DataParallel(actor_critic)
+
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(
             actor_critic,

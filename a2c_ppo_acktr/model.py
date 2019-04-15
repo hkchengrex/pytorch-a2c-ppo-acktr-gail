@@ -359,7 +359,7 @@ class MixBase(NNBase):
         #     init_(nn.Conv2d(num_image_inputs, 16, 5, stride=1)), nn.LeakyReLU(),
         #     init_(nn.Conv2d(16, 32, 3, stride=1)), nn.LeakyReLU(),
         # )
-        self.main = nn.DataParallel(resnet34(input_chan=num_image_inputs))
+        self.main = resnet34(input_chan=num_image_inputs)
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), np.sqrt(2))
@@ -453,8 +453,7 @@ class MixBase(NNBase):
             Define network architectures
             Each input channel is processed by a Sequential network
         """
-        out_sequence = {}
-        i = 0
+        out_sequence = nn.ModuleList()
         for s in spec:
             if s.type == features.FeatureType.CATEGORICAL:
                 dims = np.round(np.log2(s.scale)).astype(np.int32).item()
@@ -464,8 +463,7 @@ class MixBase(NNBase):
                 sequence = nn.Sequential(
                     embed_fn(s.scale, 1),
                     nn.ReLU(True))
-                out_sequence[i] = sequence
-                i+=1
+                out_sequence.append(sequence)
         return out_sequence
 
     def _embed_spatial(self, in_, out_):
