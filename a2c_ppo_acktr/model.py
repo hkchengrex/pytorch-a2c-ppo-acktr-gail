@@ -335,12 +335,12 @@ class MLPBase(NNBase):
 
         return self.critic_linear(hidden_critic), hidden_actor, rnn_hxs
 
+from .resnet import *
 
 class MixBase(NNBase):
     def __init__(self, num_image_inputs, num_non_image_inputs, map_features, flat_features, recurrent=False,
-                 hidden_size=512):
-        super(MixBase, self).__init__(recurrent, hidden_size, hidden_size)
-
+                    action_size=16, recurrent_size=256, hidden_size=256):
+        super(MixBase, self).__init__(recurrent, recurrent_size, hidden_size)
 
         self.map_features = map_features
         self.flat_features = flat_features
@@ -351,25 +351,28 @@ class MixBase(NNBase):
         ## Number of Element in Ino Vectors
         self.num_non_image_inputs = num_non_image_inputs
 
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0), nn.init.calculate_gain('leaky_relu'))
+        # init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
+        #                        constant_(x, 0), nn.init.calculate_gain('leaky_relu'))
 
         ## Spatial Feature Convolution
-        self.main = nn.Sequential(
-            init_(nn.Conv2d(num_image_inputs, 16, 5, stride=1)), nn.LeakyReLU(),
-            init_(nn.Conv2d(16, 32, 3, stride=1)), nn.LeakyReLU(),
-        )
+        # self.main = nn.Sequential(
+        #     init_(nn.Conv2d(num_image_inputs, 16, 5, stride=1)), nn.LeakyReLU(),
+        #     init_(nn.Conv2d(16, 32, 3, stride=1)), nn.LeakyReLU(),
+        # )
+        self.main = resnet34(input_chan=num_image_inputs)
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), np.sqrt(2))
 
         ## Non Spatial FCN After Concat
-        ## 32 is the number of the channels after spatial convolutions
-        state_channels = 32 + num_non_image_inputs  # stacking screen, info
-        self.fc = nn.Sequential(init_(nn.Linear(78 * 78 * state_channels, 256)), nn.LeakyReLU())
+        state_channels = 512 + num_non_image_inputs  # stacking screen, info
+        self.fc = nn.Sequential(init_(nn.Linear(state_channels, 512)),
+                                    nn.LeakyReLU(), 
+                                    init_(nn.Linear(512, 256)),
+                                    nn.LeakyReLU(), )
 
         ## Final Critic and Actor Output Layer
-        self.actor = nn.Sequential(init_(nn.Linear(256, hidden_size)))
+        self.actor = nn.Sequential()
         self.critic = nn.Sequential(init_(nn.Linear(256, 1)))
 
         ## Embedding Layer
@@ -399,21 +402,23 @@ class MixBase(NNBase):
             )
         )
         '''
-        # Non Spatial Vector BroadCast
-        embed_flat = embed_flat.unsqueeze(2).unsqueeze(3).expand(embed_flat.size(0), embed_flat.size(1), 78, 78)
-
         # Concat Spatial and Non Spatial Features
         x_state = torch.cat((embed_screen, embed_flat), dim=1)  # concat along channel dimension
 
         # Non Spatial FC Layer
-        non_spatial = x_state.view(x_state.shape[0], -1)
+        non_spatial = x_state
         non_spatial = self.fc(non_spatial)
+
+        if self.is_recurrent:
+            non_spatial, rnn_hxs = self._forward_gru(non_spatial, rnn_hxs, masks)
 
         # Policy Out
         non_spatial_policy = self.actor(non_spatial)
 
         # Critic Out
         value = self.critic(non_spatial)
+
+        value = value.clamp(-10, 10)
 
         return value, non_spatial_policy, rnn_hxs
 

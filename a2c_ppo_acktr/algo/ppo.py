@@ -84,6 +84,8 @@ class PPO():
                 (value_loss * self.value_loss_coef + action_loss -
                  dist_entropy * self.entropy_coef).backward()
 
+                # print(return_batch)
+
                 # print((value_loss * self.value_loss_coef + action_loss -
                 #  dist_entropy * self.entropy_coef).mean())
                 # print(self.actor_critic.base.fc[0].weight.grad.mean())
