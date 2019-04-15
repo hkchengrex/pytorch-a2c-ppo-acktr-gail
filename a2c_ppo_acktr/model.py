@@ -359,7 +359,7 @@ class MixBase(NNBase):
         #     init_(nn.Conv2d(num_image_inputs, 16, 5, stride=1)), nn.LeakyReLU(),
         #     init_(nn.Conv2d(16, 32, 3, stride=1)), nn.LeakyReLU(),
         # )
-        self.main = resnet34(input_chan=num_image_inputs)
+        self.main = nn.DataParallel(resnet34(input_chan=num_image_inputs))
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), np.sqrt(2))
@@ -429,7 +429,7 @@ class MixBase(NNBase):
         relu_gain = nn.init.calculate_gain('relu')
         linear = nn.Linear(in_, out_)
         linear.weight.data.mul_(relu_gain)
-        return nn.DataParallel(linear)
+        return linear
 
     def make_one_hot_1d(self, labels, dtype, C=2):
         '''
@@ -461,9 +461,9 @@ class MixBase(NNBase):
                 ###
                 dims = max(dims, 1)
                 ###
-                sequence = nn.DataParallel(nn.Sequential(
+                sequence = nn.Sequential(
                     embed_fn(s.scale, 1),
-                    nn.ReLU(True)))
+                    nn.ReLU(True))
                 out_sequence[i] = sequence
                 i+=1
         return out_sequence
