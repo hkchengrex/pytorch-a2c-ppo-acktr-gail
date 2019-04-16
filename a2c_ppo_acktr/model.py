@@ -418,7 +418,7 @@ class MixBase(NNBase):
         # Critic Out
         value = self.critic(non_spatial)
 
-        value = value.clamp(-10, 10)
+        value = torch.tanh(value) * 5
 
         return value, non_spatial_policy, rnn_hxs
 
