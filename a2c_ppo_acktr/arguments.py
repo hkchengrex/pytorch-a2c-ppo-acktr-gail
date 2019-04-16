@@ -151,6 +151,11 @@ def get_args():
         help='use a linear schedule on the learning rate')
 
     parser.add_argument(
+        '--load-model',
+        default=None,
+        help='path to model to be loaded')
+
+    parser.add_argument(
         'expr_id',
         help='Experiment id')
     args = parser.parse_args()
