@@ -31,16 +31,32 @@ class A2C_ACKTR():
                 actor_critic.parameters(), lr, eps=eps, alpha=alpha)
 
     def update(self, rollouts):
-        obs_shape = rollouts.obs.size()[2:]
-        action_shape = rollouts.actions.size()[-1]
+        # obs_shape = rollouts.obs.size()[2:]
+        # action_shape = rollouts.actions.size()[-1]
+
+        image_shape = rollouts.image.size()[2:]
+        non_image_shape = rollouts.non_image.size()[2:]
+        action_shape = rollouts.dis_actions.size()[1:]
+
+        # print(action_shape)
+        # print(rollouts.dis_actions.size())
+
         num_steps, num_processes, _ = rollouts.rewards.size()
 
+        # values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
+        #     rollouts.obs[:-1].view(-1, *obs_shape),
+        #     rollouts.recurrent_hidden_states[0].view(
+        #         -1, self.actor_critic.recurrent_hidden_state_size),
+        #     rollouts.masks[:-1].view(-1, 1),
+        #     rollouts.actions.view(-1, action_shape))
+
         values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
-            rollouts.obs[:-1].view(-1, *obs_shape),
-            rollouts.recurrent_hidden_states[0].view(
-                -1, self.actor_critic.recurrent_hidden_state_size),
-            rollouts.masks[:-1].view(-1, 1),
-            rollouts.actions.view(-1, action_shape))
+                    rollouts.image[:-1].view(-1, *image_shape),
+                    rollouts.non_image[:-1].view(-1, *non_image_shape),
+                    rollouts.recurrent_hidden_states[-1].view(-1, self.actor_critic.recurrent_hidden_state_size),
+                    rollouts.masks[:-1].view(-1, 1),
+                    rollouts.dis_actions[:-1].view(2, 6),
+                    None)
 
         values = values.view(num_steps, num_processes, 1)
         action_log_probs = action_log_probs.view(num_steps, num_processes, 1)
