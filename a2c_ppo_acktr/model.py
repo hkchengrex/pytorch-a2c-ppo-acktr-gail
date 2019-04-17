@@ -165,13 +165,16 @@ class Policy(nn.Module):
 
         #######
 
+        steps = actor_features.shape[0]
+        action_log_probs = torch.ones(steps, len(self.num_outputs_dis)).cuda()
+
         if con_dist is not None:
             action_log_probs = con_dist.log_probs(con_action)
             for i in range(len(self.num_outputs_dis)):
                 action_log_probs += discrete_dist[i].log_probs(dis_action[:,i])
         else:
-            action_log_probs = sum([discrete_dist[i].log_probs(dis_action[:,i])
-                                    for i in range(len(self.num_outputs_dis))])
+            for i in range(len(self.num_outputs_dis)):
+                action_log_probs[:, i] = discrete_dist[i].log_probs(dis_action[:,i])
 
         if con_dist is not None:
             dist_entropy = con_dist.entropy().mean()
