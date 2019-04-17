@@ -344,6 +344,8 @@ class MixBase(NNBase):
 
         self.map_features = map_features
         self.flat_features = flat_features
+        self.embedding_dimension = 0
+        self.embedding_dimension_flat = 0
 
         ## Number of Input Channels
         self.num_image_inputs = num_image_inputs
@@ -359,17 +361,9 @@ class MixBase(NNBase):
         #     init_(nn.Conv2d(num_image_inputs, 16, 5, stride=1)), nn.LeakyReLU(),
         #     init_(nn.Conv2d(16, 32, 3, stride=1)), nn.LeakyReLU(),
         # )
-        self.main = resnet34(input_chan=num_image_inputs)
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), np.sqrt(2))
-
-        ## Non Spatial FCN After Concat
-        state_channels = 512 + num_non_image_inputs  # stacking screen, info
-        self.fc = nn.Sequential(init_(nn.Linear(state_channels, 512)),
-                                    nn.LeakyReLU(), 
-                                    init_(nn.Linear(512, 256)),
-                                    nn.LeakyReLU(), )
 
         ## Final Critic and Actor Output Layer
         self.actor = nn.Sequential(init_(nn.Linear(256, 256)))
@@ -379,48 +373,38 @@ class MixBase(NNBase):
         self.embed_screen = self.init_embed_obs(self.map_features, self._embed_spatial)
         self.embed_flat = self.init_embed_obs(self.flat_features, self._embed_flat)
 
+        self.main = resnet34(input_chan=self.embedding_dimension)
+
+        ## Non Spatial FCN After Concat
+        state_channels = 512 + self.embedding_dimension_flat  # stacking screen, info
+        self.fc = nn.Sequential(init_(nn.Linear(state_channels, 512)),
+                                    nn.LeakyReLU(),
+                                    init_(nn.Linear(512, 256)),
+                                    nn.LeakyReLU(), )
+
         self.train()
 
     def forward(self, inputs_image, inputs_non_image, rnn_hxs, masks):
 
         ## Embedding and Preprocessing
+
         embed_screen = self.embed_obs(inputs_image, self.embed_screen, self.make_one_hot_2d)
         embed_flat = self.embed_obs_flat(inputs_non_image, self.embed_flat, self.make_one_hot_1d)
 
-        # Spatial Convolution
         embed_screen = self.main(embed_screen)
 
-        # print(self.fc[0].weight)
+        cat = torch.cat((embed_screen, embed_flat), dim=1)
 
-        '''
-        x = Variable(
-            inputs_non_image.repeat(
-                inputs_non_image.shape[0],
-                math.ceil(inputs_image.shape[2] * inputs_image.shape[3] / inputs_non_image.shape[0])
-            ).resize_(
-                inputs_non_image.shape[0], 1, inputs_image.shape[2], inputs_image.shape[3]
-            )
-        )
-        '''
-        # Concat Spatial and Non Spatial Features
-        x_state = torch.cat((embed_screen, embed_flat), dim=1)  # concat along channel dimension
-
-        # Non Spatial FC Layer
-        non_spatial = x_state
-        non_spatial = self.fc(non_spatial)
+        non_spatial = self.fc(cat)
 
         if self.is_recurrent:
             non_spatial, rnn_hxs = self._forward_gru(non_spatial, rnn_hxs, masks)
 
-        # Policy Out
-        non_spatial_policy = self.actor(non_spatial)
+        policy = self.actor(non_spatial)
 
-        # Critic Out
         value = self.critic(non_spatial)
 
-        value = torch.tanh(value) * 3
-
-        return value, non_spatial_policy, rnn_hxs
+        return value, policy, rnn_hxs
 
     def _embed_flat(self, in_, out_):
         return self._linear_init(in_, out_)
@@ -432,75 +416,45 @@ class MixBase(NNBase):
         return linear
 
     def make_one_hot_1d(self, labels, dtype, C=2):
-        '''
-        Reference: https://lirnli.wordpress.com/2017/09/03/one-hot-encoding-in-pytorch/
-        Parameters
-        ----------
-        labels : N, where N is batch size.
-        dtype: Cuda or not
-        C : number of classes in labels.
-
-        Returns
-        -------
-        target : N x C
-        '''
         out = Variable(dtype(labels.size(0), C).zero_())
         index = labels.contiguous().view(-1, 1).long()
         return out.scatter_(1, index, 1)
 
     def init_embed_obs(self, spec, embed_fn):
-        """
-            Define network architectures
-            Each input channel is processed by a Sequential network
-        """
         out_sequence = nn.ModuleList()
         for s in spec:
             if s.type == features.FeatureType.CATEGORICAL:
                 dims = np.round(np.log2(s.scale)).astype(np.int32).item()
-                ###
                 dims = max(dims, 1)
-                ###
+                if embed_fn == self._embed_spatial:
+                    self.embedding_dimension += dims
+                if embed_fn == self._embed_flat:
+                    self.embedding_dimension_flat += dims
                 sequence = nn.Sequential(
-                    embed_fn(s.scale, 1),
+                    embed_fn(s.scale, dims),
                     nn.ReLU(True))
                 out_sequence.append(sequence)
+            if s.type == features.FeatureType.SCALAR:
+                if embed_fn == self._embed_spatial:
+                    self.embedding_dimension += 1
+                if embed_fn == self._embed_flat:
+                    self.embedding_dimension_flat += 1
         return out_sequence
 
     def _embed_spatial(self, in_, out_):
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0), nn.init.calculate_gain('relu'))
-        return init_(nn.Conv2d(in_, out_, kernel_size=1, stride=1, padding=0))
+        return nn.Conv2d(in_, out_, kernel_size=1, stride=1, padding=0)
 
     def make_one_hot_2d(self, labels, dtype, C=2):
-        '''
-        Reference: http://jacobkimmel.github.io/pytorch_onehot/
-        Parameters
-        ----------
-        labels : torch.autograd.Variable of torch.LongTensor
-            N x 1 x H x W, where N is batch size.
-        dtype: Cuda or not
-        C : number of classes in labels.
-
-        Returns
-        -------
-        target : N x C x H x W
-        '''
         one_hot = Variable(dtype(labels.size(0), C, labels.size(2), labels.size(3)).zero_())
         target = one_hot.scatter_(1, labels.long(), 1)
         return target
 
     def embed_obs(self, obs, networks, one_hot):
-        """
-            Embed observation channels
-        """
-        # Channel dimension is 1
         feats = torch.chunk(obs, self.num_image_inputs, dim=1)
         out_list = []
         i = 0
         for feat, s in zip(feats, self.map_features):
             if s.type == features.FeatureType.CATEGORICAL:
-                dims = np.round(np.log2(s.scale)).astype(np.int32).item()
-                dims = max(dims, 1)
                 indices = one_hot(feat, torch.cuda.FloatTensor, C=s.scale)
                 out = networks[i](indices.float())
                 i += 1
@@ -514,17 +468,11 @@ class MixBase(NNBase):
         return torch.cat(out_list, 1)
 
     def embed_obs_flat(self, obs, networks, one_hot):
-        """
-            Embed observation channels
-        """
-        # Channel dimension is 1
         feats = torch.chunk(obs, self.num_non_image_inputs, dim=1)
         out_list = []
         i = 0
         for feat, s in zip(feats, self.flat_features):
             if s.type == features.FeatureType.CATEGORICAL:
-                dims = np.round(np.log2(s.scale)).astype(np.int32).item()
-                dims = max(dims, 1)
                 indices = one_hot(feat, torch.cuda.FloatTensor, C=s.scale)
                 out = networks[i](indices.float())
                 i += 1
