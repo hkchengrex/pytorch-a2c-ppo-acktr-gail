@@ -156,6 +156,7 @@ class Policy(nn.Module):
         discrete_dist = []
         for i in range(len(self.num_outputs_dis)):
             discrete_dist.append(self.dist_dis[i](actor_features))
+            # print(discrete_dist[i])
 
         if self.dist_con is not None:
             con_dist = self.dist_con(actor_features)
@@ -167,6 +168,7 @@ class Policy(nn.Module):
 
         steps = actor_features.shape[0]
         action_log_probs = torch.ones(steps, len(self.num_outputs_dis)).cuda()
+        # print(action_log_probs.shape)
 
         if con_dist is not None:
             action_log_probs = con_dist.log_probs(con_action)
@@ -174,7 +176,10 @@ class Policy(nn.Module):
                 action_log_probs += discrete_dist[i].log_probs(dis_action[:,i])
         else:
             for i in range(len(self.num_outputs_dis)):
-                action_log_probs[:, i] = discrete_dist[i].log_probs(dis_action[:,i])
+                # print(discrete_dist[i])
+                # print(dis_action.shape)
+                # print(discrete_dist[i].log_probs(dis_action[:,i]).shape)
+                action_log_probs[:, i:i+1] = discrete_dist[i].log_probs(dis_action[:,i])
 
         if con_dist is not None:
             dist_entropy = con_dist.entropy().mean()
